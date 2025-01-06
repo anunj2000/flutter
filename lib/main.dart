@@ -364,21 +364,168 @@ class _NewUserFormState extends State<NewUserForm> {
   }
 }
 
-class UserDetailScreen extends StatelessWidget {
+class UserDetailScreen extends StatefulWidget {
   final Map<String, dynamic> user;
 
   const UserDetailScreen({super.key, required this.user});
 
   @override
+  _UserDetailScreenState createState() => _UserDetailScreenState();
+}
+
+class _UserDetailScreenState extends State<UserDetailScreen> {
+  late TextEditingController _nameController;
+  late TextEditingController _emailController;
+  late String _selectedGender;
+  late bool _isActive;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.user['name']);
+    _emailController = TextEditingController(text: widget.user['email']);
+    _selectedGender = widget.user['gender'] ?? 'male';
+    _isActive = widget.user['status'] == 'active';
+  }
+
+  Future<void> _submitForm() async {
+    var connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      _showNoConnectionDialog();
+      return;
+    }
+
+    final updatedUser = {
+      "name": _nameController.text,
+      "email": _emailController.text,
+      "gender": _selectedGender,
+      "status": _isActive ? 'active' : 'inactive',
+    };
+
+    try {
+      final response = await http.put(
+        Uri.parse('https://gorest.co.in/public/v1/users/${widget.user['id']}'),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${Config.apiToken}",
+        },
+        body: jsonEncode(updatedUser),
+      );
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('User updated successfully!')),
+        );
+        Navigator.pop(context, true); // Return true to indicate success
+      } else {
+        var responseJson = jsonDecode(response.body);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text('Failed to update user: ${responseJson['message']}')),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error updating user: $e')),
+      );
+    }
+  }
+
+  void _showNoConnectionDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Network Connection Issue'),
+        content: const Text('No internet connection. Please try again later.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(user['name']),
+        backgroundColor: const Color(0xFF2979FF),
+        title: const Text("User Details"),
       ),
-      body: Center(
-        child: Text(
-          'User Details: ${user['name']}',
-          style: const TextStyle(fontSize: 24),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              'Edit User',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            DropdownButtonFormField<String>(
+              value: _selectedGender,
+              items: const [
+                DropdownMenuItem(
+                  value: 'male',
+                  child: Text('Male'),
+                ),
+                DropdownMenuItem(
+                  value: 'female',
+                  child: Text('Female'),
+                ),
+                DropdownMenuItem(
+                  value: 'other',
+                  child: Text('Other'),
+                ),
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedGender = value!;
+                });
+              },
+              decoration: const InputDecoration(
+                labelText: 'Gender',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SwitchListTile(
+              title: const Text('Active'),
+              value: _isActive,
+              onChanged: (bool value) {
+                setState(() {
+                  _isActive = value;
+                });
+              },
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _submitForm,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              child: const Text('Update'),
+            ),
+          ],
         ),
       ),
     );
